@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — lint, types, tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: counselready
+          POSTGRES_PASSWORD: counselready
+          POSTGRES_DB: counselready_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Test-only credentials for the ephemeral service container above.
+      # Real credentials live in Azure Key Vault and never enter this file.
+      TEST_DATABASE_URL: postgresql+asyncpg://counselready:counselready@localhost:5432/counselready_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format
+        run: ruff format --check .
+
+      - name: Types
+        run: mypy app
+
+      - name: Tests
+        run: pytest
+
+      - name: Migrations apply to an empty database
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+        run: alembic upgrade head
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan history for committed secrets
+        uses: gitleaks/gitleaks-action@44c470ffc35caa8b1eb3e8012ca53c2f9bea4eb5 # v2.3.7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  licenses:
+    name: Dependency licenses
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install production dependencies only
+        run: pip install .
+
+      - name: Install the license scanner
+        run: pip install pip-licenses
+
+      # CLAUDE.md §6: permissive licenses only. A copyleft dependency fails the build
+      # rather than being discovered at release.
+      - name: Fail on copyleft licenses
+        run: |
+          pip-licenses --format=json > licenses.json
+          python - <<'PY'
+          import json
+          import sys
+
+          FORBIDDEN = ("GPL", "AGPL", "SSPL", "LGPL", "CDDL", "EPL", "MPL")
+          ALLOWED_EXCEPTIONS = {"typing_extensions"}  # PSF-licensed, reported oddly
+
+          offenders = []
+          for package in json.load(open("licenses.json")):
+              name = package["Name"]
+              license_name = package["License"]
+              if name in ALLOWED_EXCEPTIONS:
+                  continue
+              if any(token in license_name.upper() for token in FORBIDDEN):
+                  offenders.append(f"{name}: {license_name}")
+
+          if offenders:
+              print("Forbidden licenses found:", *offenders, sep="\n  ")
+              sys.exit(1)
+          print("All dependency licenses are permissive.")
+          PY

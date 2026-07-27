@@ -10,7 +10,7 @@ adversarial review findings fixed), **Merged** (on `main`).
 | # | Portion | Built | Tested | Merged | Notes |
 |---|---|---|---|---|---|
 | 0.1 | Repo scaffolding — governance (CLAUDE.md), ADR-0001 (scope & non-advice posture), ADR-0002 (Azure architecture), founding brainstorm + market research migrated | ✅ | n/a | ⏳ | Docs only; no code. |
-| 0.2 | Backend skeleton — API service, database, migrations, CI quality gate (lint/format/types/tests/coverage/secret-scan), license scan | ⏳ | ⏳ | ⏳ | Stack choice is an ADR. |
+| 0.2 | Backend skeleton — API service, database session, migration infrastructure, CI quality gate (lint/format/types/tests/coverage/secret-scan), license scan | ✅ | ✅ | ⏳ | ADR-0003. FastAPI + SQLAlchemy 2 async + Alembic + Postgres. Liveness/readiness probes (readiness fails closed to 503). Document-text-free request logging: route templates only, request id resolved before downstream so a 500 still logs one correlated line. Startup guard in the lifespan, not in `Settings`, so Alembic is unaffected. Naming convention on the metadata for stable migration constraint names. 32 tests, 97% coverage, `mypy --strict` clean; generated migrations verified lint-clean. |
 | 0.3 | Auth — account creation, MFA (CLAUDE.md §3 makes MFA a launch requirement, not a later hardening item), session handling | ⏳ | ⏳ | ⏳ | |
 | 0.4 | Account & data deletion — in-app + API, full destruction of documents and derived data | ⏳ | ⏳ | ⏳ | Hard app-store requirement; build it before it blocks submission, not after. |
 

@@ -41,3 +41,6 @@ test-results/
 .idea/
 .vscode/
 *.swp
+
+# Alembic bytecode from generated migrations
+alembic/versions/__pycache__/

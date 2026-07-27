@@ -17,6 +17,11 @@ from sqlalchemy.pool import NullPool
 from app.core.config import settings
 from app.db.base import Base
 
+# Imported for the side effect of registering every model on Base.metadata: a model
+# that is not imported is invisible to autogenerate and silently missing from the
+# migration it should have appeared in.
+import app.models  # noqa: F401  isort:skip
+
 config = context.config
 
 if config.config_file_name is not None:

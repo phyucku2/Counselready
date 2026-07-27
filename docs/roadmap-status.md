@@ -23,7 +23,8 @@ gates everything downstream.
 |---|---|---|---|---|---|
 | 1.1 | Document upload — bounded before materializing, private blob storage, per-account job quota | ⏳ | ⏳ | ⏳ | ADR-0002 cost control. |
 | 1.2 | OCR pipeline — async job, per-page confidence propagated to the surface | ⏳ | ⏳ | ⏳ | Engine choice is an ADR. |
-| 1.3 | Document dissection — type, parties, counsel, case number, requested relief, referenced events; **every field carries doc + page + passage** | ⏳ | ⏳ | ⏳ | The ADR-0001 citation guarantee, enforced at storage. |
+| 1.3a | **Core case-file schema** — user/case/party/document/page/passage/extracted_fact, with the citation guarantee as a NOT NULL foreign key | ✅ | ✅ | ⏳ | ADR-0004. Migration `2d61942264a6`, verified reversible (upgrade → downgrade → upgrade). 50 tests (32 unit + 18 live-Postgres integration), 98% coverage, `mypy --strict` clean. The database rejects an unanchored fact — proven by test, not by convention. |
+| 1.3b | Document dissection — the extractor that populates those fields from page text | ⏳ | ⏳ | ⏳ | Must locate every value in the source text; a value it cannot anchor is dropped, not stored. |
 | 1.4 | Florida jurisdiction profile — document types and terminology behind the profile seam | ⏳ | ⏳ | ⏳ | CLAUDE.md §7. |
 | 1.5 | Accuracy validation harness — synthetic gold-standard corpus, precision/recall per field, error taxonomy with hallucination as a release-blocking class | ⏳ | ⏳ | ⏳ | Synthetic documents only (§3). |
 

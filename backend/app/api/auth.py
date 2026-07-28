@@ -13,8 +13,16 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 
+from app.api.cases import Store
 from app.api.deps import AuthenticatedSession, CurrentUser, DbSession, JwtSecret
-from app.auth.passwords import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, WeakPasswordError
+from app.auth.deletion import collect_storage_keys, delete_account, purge_objects
+from app.auth.mfa_service import is_mfa_active, verify_code_for_login
+from app.auth.passwords import (
+    MAX_PASSWORD_LENGTH,
+    MIN_PASSWORD_LENGTH,
+    WeakPasswordError,
+    verify_password_against,
+)
 from app.auth.service import (
     AuthenticationError,
     EmailAlreadyRegisteredError,
@@ -182,3 +190,81 @@ async def logout_everywhere(account: CurrentUser, session: DbSession) -> Respons
         user_session.revoked_at = now
     await session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+class DeleteAccountRequest(BaseModel):
+    """Re-authentication for an irreversible action.
+
+    The password is required even though the caller already holds a session, and the
+    MFA code is required when MFA is on: destroying the account is exactly what someone
+    who found an unlocked phone would do, and it is the one action with no undo.
+    """
+
+    password: str = Field(max_length=MAX_PASSWORD_LENGTH)
+    mfa_code: str | None = Field(default=None, max_length=64)
+    acknowledge: bool = Field(
+        description="Must be true. Forces the client to show what is about to be lost."
+    )
+
+
+class DeletionSummaryResponse(BaseModel):
+    cases_deleted: int
+    documents_deleted: int
+    objects_removed: int
+
+
+@router.post("/me/delete", response_model=DeletionSummaryResponse)
+async def delete_own_account(
+    body: DeleteAccountRequest,
+    account: CurrentUser,
+    session: DbSession,
+    store: Store,
+) -> DeletionSummaryResponse:
+    """Permanently destroy this account and every case it owns.
+
+    A hard app-store requirement for any app collecting user data, and the right
+    default regardless: someone who no longer wants their family court file held by a
+    third party should not have to ask permission to remove it.
+    """
+    if not body.acknowledge:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Confirm that you understand this cannot be undone.",
+        )
+
+    if not verify_password_against(body.password, account.password_hash):
+        raise INVALID_CREDENTIALS
+
+    if await is_mfa_active(session, user_id=account.id):
+        from app.core.config import settings
+
+        if body.mfa_code is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="A verification code is required to delete your account.",
+            )
+        try:
+            await verify_code_for_login(
+                session,
+                account=account,
+                code=body.mfa_code,
+                key=settings.mfa_encryption_key,
+                now=datetime.now(UTC),
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid verification code",
+            ) from exc
+
+    keys = await collect_storage_keys(session, user_id=account.id)
+    summary = await delete_account(session, store, account=account)
+    # Blobs are removed after the row deletion, so a database failure leaves
+    # unreferenced objects rather than records pointing at absent bytes.
+    removed = await purge_objects(store, keys)
+
+    return DeletionSummaryResponse(
+        cases_deleted=summary.cases,
+        documents_deleted=summary.documents,
+        objects_removed=removed,
+    )

@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingest.pdf import ExtractionResult, extract_text_layer
+from app.jobs.queue import enqueue_ocr
 from app.models.document import Document, DocumentKind, DocumentPage, IngestSource, OcrStatus
 from app.storage.base import ObjectStore, content_hash, storage_key
 
@@ -77,6 +78,11 @@ async def ingest_document(
     )
     session.add(document)
     await session.flush()
+
+    if extraction.needs_ocr:
+        # Enqueued in the same transaction as the document, so the queue can never
+        # hold work for a document that was rolled back.
+        await enqueue_ocr(session, document_id=document.id)
 
     session.add_all(
         [

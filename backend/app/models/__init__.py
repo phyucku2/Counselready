@@ -7,6 +7,7 @@ the migration.
 
 from __future__ import annotations
 
+from app.jobs.models import Job, JobKind, JobStatus
 from app.models.audit import AuthEvent, AuthEventType, CaseAction, CaseAuditEvent
 from app.models.case import Case, Jurisdiction, Party, PartyRole
 from app.models.document import (
@@ -40,6 +41,9 @@ __all__ = [
     "ExtractedFact",
     "FactField",
     "IngestSource",
+    "Job",
+    "JobKind",
+    "JobStatus",
     "Jurisdiction",
     "OcrStatus",
     "Party",

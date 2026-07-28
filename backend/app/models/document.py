@@ -57,6 +57,10 @@ class OcrStatus(StrEnum):
 
     pending = "pending"
     processing = "processing"
+    # The text layer was read but at least one page carries no text, so the document
+    # is not fully read yet. Distinct from `complete` on purpose: a scanned exhibit
+    # inside a native PDF must not be reported as understood.
+    needs_ocr = "needs_ocr"
     complete = "complete"
     failed = "failed"
 

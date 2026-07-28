@@ -20,6 +20,7 @@ from app.models.document import (
 from app.models.event import CaseEvent, DatePrecision, EventKind, EventProvenance
 from app.models.extraction import ExtractedFact, FactField
 from app.models.mfa import RecoveryCode, UserMfa
+from app.models.passkey import Passkey, PasskeyChallenge
 from app.models.session import UsedRefreshToken, UserSession
 from app.models.user import UserAccount
 
@@ -44,6 +45,8 @@ __all__ = [
     "Party",
     "PartyRole",
     "Passage",
+    "Passkey",
+    "PasskeyChallenge",
     "RecoveryCode",
     "UsedRefreshToken",
     "UserAccount",

@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # refused rather than storing a secret in the clear.
     mfa_encryption_key: str | None = None
 
+    # WebAuthn relying party. `rp_id` must be the registered domain and `origin` the
+    # exact origin the browser sees — that binding is what makes a passkey
+    # phishing-resistant, so it cannot be inferred or guessed.
+    webauthn_rp_id: str = "localhost"
+    webauthn_origin: str = "http://localhost:5173"
+
     # Number of serving worker processes. Read by the lifespan guard.
     web_concurrency: int = 1
 

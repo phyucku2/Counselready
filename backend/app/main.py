@@ -18,6 +18,7 @@ from app.api.auth import router as auth_router
 from app.api.cases import router as cases_router
 from app.api.health import router as health_router
 from app.api.mfa import router as mfa_router
+from app.api.passkeys import router as passkeys_router
 from app.core.config import Settings, settings
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.db.session import dispose_engine
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     application.include_router(health_router)
     application.include_router(auth_router)
     application.include_router(mfa_router)
+    application.include_router(passkeys_router)
     application.include_router(cases_router)
     return application
 

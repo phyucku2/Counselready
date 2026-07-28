@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Unset in unit tests and in contexts that never touch the database.
     database_url: str | None = None
 
+    # Signs access tokens. Unset is tolerated only for single-process local work,
+    # where the lifespan mints an ephemeral key; see `resolve_jwt_secret`.
+    jwt_secret: str | None = None
+
     # Number of serving worker processes. Read by the lifespan guard.
     web_concurrency: int = 1
 

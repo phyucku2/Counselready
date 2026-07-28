@@ -77,4 +77,8 @@ addopts = "--cov=app --cov-report=term-missing --cov-fail-under=85 -q"
 
 [tool.coverage.run]
 branch = true
+# SQLAlchemy's asyncio bridge executes ORM work inside greenlets. Without this,
+# coverage silently misses every line that runs there — which is most of the
+# database code — and reports a number far below what the tests actually cover.
+concurrency = ["thread", "greenlet"]
 omit = ["app/__main__.py"]

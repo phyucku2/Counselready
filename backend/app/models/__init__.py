@@ -7,7 +7,7 @@ the migration.
 
 from __future__ import annotations
 
-from app.models.audit import AuthEvent, AuthEventType
+from app.models.audit import AuthEvent, AuthEventType, CaseAction, CaseAuditEvent
 from app.models.case import Case, Jurisdiction, Party, PartyRole
 from app.models.document import (
     Document,
@@ -27,6 +27,8 @@ __all__ = [
     "AuthEvent",
     "AuthEventType",
     "Case",
+    "CaseAction",
+    "CaseAuditEvent",
     "CaseEvent",
     "DatePrecision",
     "Document",

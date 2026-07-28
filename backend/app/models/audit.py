@@ -16,6 +16,7 @@ from enum import StrEnum
 
 from sqlalchemy import ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import TimestampedBase
@@ -48,3 +49,39 @@ class AuthEvent(TimestampedBase):
     event_type: Mapped[AuthEventType] = mapped_column(
         PgEnum(AuthEventType, name="auth_event_type", create_type=False), nullable=False
     )
+
+
+class CaseAction(StrEnum):
+    """What was done with case material. A closed vocabulary so the audit trail can
+    never accidentally carry document text."""
+
+    case_created = "case_created"
+    case_read = "case_read"
+    case_list = "case_list"
+    document_uploaded = "document_uploaded"
+    document_list = "document_list"
+    document_read = "document_read"
+
+
+class CaseAuditEvent(TimestampedBase):
+    """A read or write of case material (CLAUDE.md §3).
+
+    Records who, what, and which case — never the content. `detail` holds counts and
+    references only, so a leaked audit table discloses activity, not case facts.
+    """
+
+    __tablename__ = "case_audit_event"
+    __table_args__ = (Index("ix_case_audit_event_case_created", "case_id", "created_at"),)
+
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_account.id", ondelete="SET NULL"), index=True
+    )
+    # SET NULL rather than CASCADE: deleting a case must not erase the record that it
+    # was accessed, only what it contained.
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("case.id", ondelete="SET NULL"), index=True
+    )
+    action: Mapped[CaseAction] = mapped_column(
+        PgEnum(CaseAction, name="case_action", create_type=False), nullable=False
+    )
+    detail: Mapped[dict[str, int] | None] = mapped_column(JSONB)

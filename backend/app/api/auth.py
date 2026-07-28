@@ -89,7 +89,7 @@ async def register(body: RegisterRequest, session: DbSession) -> AccountResponse
         )
     except WeakPasswordError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     except EmailAlreadyRegisteredError as exc:
         # 409 rather than a 200 that pretends to have registered: this endpoint is

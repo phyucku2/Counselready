@@ -32,8 +32,9 @@ gates everything downstream.
 
 | # | Portion | Built | Tested | Merged | Notes |
 |---|---|---|---|---|---|
-| 2.1 | Event extraction + date normalization — filed date vs. event date vs. alleged date kept distinct | ⏳ | ⏳ | ⏳ | |
-| 2.2 | Timeline assembly — conflicting accounts render as two attributed claims, never merged | ⏳ | ⏳ | ⏳ | CLAUDE.md §2. |
+| 2.1a | **Timeline event schema + provenance split** — `case_event` with CHECK constraints: document-derived events cite a passage and are not attributed to a person; user-asserted events name their author and hold no passage | ✅ | ✅ | ⏳ | ADR-0005. Migration `8a1be962755b`, round-tripped. `date_precision` prevents false precision on "in March"-style sources. Conflicting accounts proven to persist as two attributed rows. 60 tests, 98% coverage. |
+| 2.1b | Event extraction — populate documentary events from page text | ⏳ | ⏳ | ⏳ | Rides with the dissection extractor (1.3b); an event that cannot be anchored is dropped. |
+| 2.2 | Timeline assembly + read API — ordering, filtering, and the `date_precision`-aware renderer | ⏳ | ⏳ | ⏳ | A renderer that formats `occurred_at` without consulting `date_precision` reintroduces false precision — needs its own test (ADR-0005). |
 | 2.3 | Timeline UI — accessible by construction; a list/table equivalent ships alongside any visualization | ⏳ | ⏳ | ⏳ | WCAG 2.2 AA. |
 
 ## Phase 3 — Issue spotting

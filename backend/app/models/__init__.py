@@ -16,14 +16,19 @@ from app.models.document import (
     OcrStatus,
     Passage,
 )
+from app.models.event import CaseEvent, DatePrecision, EventKind, EventProvenance
 from app.models.extraction import ExtractedFact, FactField
 from app.models.user import UserAccount
 
 __all__ = [
     "Case",
+    "CaseEvent",
+    "DatePrecision",
     "Document",
     "DocumentKind",
     "DocumentPage",
+    "EventKind",
+    "EventProvenance",
     "ExtractedFact",
     "FactField",
     "IngestSource",

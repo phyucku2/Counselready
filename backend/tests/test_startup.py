@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.auth.mfa import generate_encryption_key
 from app.core.config import AppEnv, Settings
 from app.core.logging import configure_logging
 from app.main import (
@@ -39,23 +40,33 @@ def test_serving_locally_without_a_database_url_is_allowed() -> None:
     check_serving_configuration(Settings(app_env=AppEnv.local, database_url=None))
 
 
+def _production(**overrides: object) -> Settings:
+    """A fully-configured production Settings, so each test varies one thing."""
+    defaults: dict[str, object] = {
+        "app_env": AppEnv.production,
+        "database_url": "postgresql+asyncpg://h/db",
+        "jwt_secret": "SYNTHETIC_SIGNING_KEY_LONG_ENOUGH_FOR_HS256",
+        "mfa_encryption_key": generate_encryption_key(),
+    }
+    return Settings(**(defaults | overrides))  # type: ignore[arg-type]
+
+
 def test_serving_in_production_with_full_configuration_is_allowed() -> None:
-    check_serving_configuration(
-        Settings(
-            app_env=AppEnv.production,
-            database_url="postgresql+asyncpg://h/db",
-            jwt_secret="SYNTHETIC_SIGNING_KEY_LONG_ENOUGH_FOR_HS256",
-        )
-    )
+    check_serving_configuration(_production())
 
 
 def test_serving_in_production_without_a_jwt_secret_fails_closed() -> None:
     """A missing signing key must stop the boot, not quietly mint an ephemeral one
     that invalidates every token on the next restart."""
     with pytest.raises(StartupConfigurationError, match="JWT_SECRET"):
-        check_serving_configuration(
-            Settings(app_env=AppEnv.production, database_url="postgresql+asyncpg://h/db")
-        )
+        check_serving_configuration(_production(jwt_secret=None))
+
+
+def test_serving_in_production_without_an_mfa_key_fails_closed() -> None:
+    """MFA is a launch requirement (CLAUDE.md §3), so a deployment that cannot store
+    a TOTP secret safely is misconfigured rather than merely limited."""
+    with pytest.raises(StartupConfigurationError, match="MFA_ENCRYPTION_KEY"):
+        check_serving_configuration(_production(mfa_encryption_key=None))
 
 
 def test_multiple_workers_without_a_jwt_secret_fails_closed() -> None:

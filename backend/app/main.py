@@ -16,6 +16,7 @@ from fastapi import FastAPI
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
+from app.api.mfa import router as mfa_router
 from app.core.config import Settings, settings
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.db.session import dispose_engine
@@ -47,6 +48,13 @@ def check_serving_configuration(config: Settings) -> None:
         # PyJWT only warns; a signing key is not a place to accept a warning.
         raise StartupConfigurationError(
             f"JWT_SECRET must be at least {MIN_JWT_SECRET_LENGTH} characters"
+        )
+
+    if config.app_env is not config.app_env.local and config.mfa_encryption_key is None:
+        # MFA is a launch requirement (CLAUDE.md §3), so a deployment that cannot
+        # store a TOTP secret safely is misconfigured, not merely limited.
+        raise StartupConfigurationError(
+            f"MFA_ENCRYPTION_KEY must be set when APP_ENV={config.app_env.value}"
         )
 
     if config.jwt_secret is None:
@@ -105,6 +113,7 @@ def create_app() -> FastAPI:
     application.add_middleware(RequestLoggingMiddleware)
     application.include_router(health_router)
     application.include_router(auth_router)
+    application.include_router(mfa_router)
     return application
 
 

@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     # where the lifespan mints an ephemeral key; see `resolve_jwt_secret`.
     jwt_secret: str | None = None
 
+    # Fernet key encrypting TOTP secrets at rest. Without it, MFA enrolment is
+    # refused rather than storing a secret in the clear.
+    mfa_encryption_key: str | None = None
+
     # Number of serving worker processes. Read by the lifespan guard.
     web_concurrency: int = 1
 

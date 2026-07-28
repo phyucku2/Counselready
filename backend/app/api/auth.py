@@ -20,6 +20,7 @@ from app.auth.service import (
     EmailAlreadyRegisteredError,
     InvalidRefreshTokenError,
     IssuedSession,
+    MfaRequired,
     RateLimitedError,
     authenticate,
     refresh_session,
@@ -51,6 +52,13 @@ class LoginRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(max_length=512)
+
+
+class MfaChallengeResponse(BaseModel):
+    """Returned instead of tokens when a second factor is owed."""
+
+    mfa_required: bool = True
+    challenge_token: str
 
 
 class TokenResponse(BaseModel):
@@ -97,8 +105,10 @@ async def register(body: RegisterRequest, session: DbSession) -> AccountResponse
     )
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, session: DbSession, secret: JwtSecret) -> TokenResponse:
+@router.post("/login", response_model=TokenResponse | MfaChallengeResponse)
+async def login(
+    body: LoginRequest, session: DbSession, secret: JwtSecret
+) -> TokenResponse | MfaChallengeResponse:
     try:
         issued = await authenticate(
             session,
@@ -115,6 +125,11 @@ async def login(body: LoginRequest, session: DbSession, secret: JwtSecret) -> To
         ) from exc
     except AuthenticationError as exc:
         raise INVALID_CREDENTIALS from exc
+
+    if isinstance(issued, MfaRequired):
+        # A correct password alone yields no credentials — only a short-lived
+        # challenge, which no other route accepts.
+        return MfaChallengeResponse(challenge_token=issued.challenge_token)
     return _tokens(issued)
 
 

@@ -15,11 +15,13 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.mfa_service import is_mfa_active
 from app.auth.passwords import hash_password, needs_rehash, verify_password_against
 from app.auth.tokens import (
     generate_refresh_token,
     hash_refresh_token,
     issue_access_token,
+    issue_mfa_challenge,
     refresh_expiry,
 )
 from app.models.audit import AuthEvent, AuthEventType
@@ -55,6 +57,18 @@ class EmailAlreadyRegisteredError(Exception):
 
 class InvalidRefreshTokenError(Exception):
     """The refresh token is unknown, expired, revoked, or already used."""
+
+
+@dataclass(frozen=True)
+class MfaRequired:
+    """The password was accepted; a second factor is still owed.
+
+    Deliberately not a session: no tokens exist yet, so a stolen password alone buys
+    an attacker nothing but a five-minute challenge.
+    """
+
+    challenge_token: str
+    user_id: uuid.UUID
 
 
 @dataclass(frozen=True)
@@ -106,7 +120,7 @@ async def _failed_attempts_since(session: AsyncSession, *, email: str, since: da
 
 async def authenticate(
     session: AsyncSession, *, email: str, password: str, secret: str, now: datetime
-) -> IssuedSession:
+) -> IssuedSession | MfaRequired:
     """Verify credentials and issue a session.
 
     Failures are recorded so the rate limiter has something to count, and so an account
@@ -141,6 +155,15 @@ async def authenticate(
     if needs_rehash(account.password_hash or ""):
         # Migrate the stored hash forward now that we hold the plaintext.
         account.password_hash = hash_password(password)
+
+    if await is_mfa_active(session, user_id=account.id):
+        # No session yet. The password alone must not produce credentials, or MFA
+        # would be advisory.
+        await session.flush()
+        return MfaRequired(
+            challenge_token=issue_mfa_challenge(user_id=account.id, secret=secret, now=now),
+            user_id=account.id,
+        )
 
     issued = await _issue_session(session, account=account, secret=secret, now=now)
     session.add(
@@ -248,3 +271,15 @@ async def load_active_session(
     if user_session is None or not user_session.is_active(now):
         return None
     return user_session
+
+
+async def complete_mfa_login(
+    session: AsyncSession, *, account: UserAccount, secret: str, now: datetime
+) -> IssuedSession:
+    """Issue the session once the second factor has been verified."""
+    issued = await _issue_session(session, account=account, secret=secret, now=now)
+    session.add(
+        AuthEvent(email=account.email, user_id=account.id, event_type=AuthEventType.login_succeeded)
+    )
+    await session.flush()
+    return issued

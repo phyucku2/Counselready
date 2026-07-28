@@ -27,6 +27,13 @@ from jwt.exceptions import InvalidTokenError
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
+
+# An MFA challenge is not a session. The `typ` claim is checked on decode so a
+# challenge can never be presented to an authenticated route, and an access token can
+# never be exchanged for one.
+MFA_CHALLENGE_TTL = timedelta(minutes=5)
+TYPE_ACCESS = "access"
+TYPE_MFA_CHALLENGE = "mfa_challenge"
 REFRESH_TOKEN_TTL = timedelta(days=30)
 
 # 32 bytes of urlsafe randomness — 256 bits of entropy.
@@ -58,6 +65,7 @@ def issue_access_token(
         "sid": str(session_id),
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
+        "typ": TYPE_ACCESS,
     }
     return jwt.encode(payload, secret, algorithm=ALGORITHM)
 
@@ -79,6 +87,9 @@ def decode_access_token(token: str, *, secret: str) -> AccessTokenClaims:
         )
     except InvalidTokenError as exc:
         raise InvalidAccessTokenError(str(exc)) from exc
+
+    if payload.get("typ") != TYPE_ACCESS:
+        raise InvalidAccessTokenError("token is not an access token")
 
     try:
         return AccessTokenClaims(
@@ -102,3 +113,43 @@ def hash_refresh_token(token: str) -> str:
 
 def refresh_expiry(now: datetime) -> datetime:
     return now + REFRESH_TOKEN_TTL
+
+
+class InvalidChallengeError(Exception):
+    """The MFA challenge is missing, malformed, expired, or wrongly signed."""
+
+
+def issue_mfa_challenge(*, user_id: uuid.UUID, secret: str, now: datetime) -> str:
+    """A short-lived token proving only that a password was accepted.
+
+    It carries no session, so presenting it to an authenticated route does nothing —
+    the `typ` check on the access-token decoder refuses it explicitly.
+    """
+    payload: dict[str, Any] = {
+        "sub": str(user_id),
+        "iat": int(now.timestamp()),
+        "exp": int((now + MFA_CHALLENGE_TTL).timestamp()),
+        "typ": TYPE_MFA_CHALLENGE,
+    }
+    return jwt.encode(payload, secret, algorithm=ALGORITHM)
+
+
+def decode_mfa_challenge(token: str, *, secret: str) -> uuid.UUID:
+    """The account a challenge belongs to, or raise `InvalidChallengeError`."""
+    try:
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=[ALGORITHM],
+            options={"require": ["exp", "iat", "sub"]},
+        )
+    except InvalidTokenError as exc:
+        raise InvalidChallengeError(str(exc)) from exc
+
+    if payload.get("typ") != TYPE_MFA_CHALLENGE:
+        raise InvalidChallengeError("token is not an MFA challenge")
+
+    try:
+        return uuid.UUID(payload["sub"])
+    except (KeyError, ValueError) as exc:
+        raise InvalidChallengeError("challenge claims are malformed") from exc

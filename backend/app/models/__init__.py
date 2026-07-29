@@ -18,7 +18,13 @@ from app.models.document import (
     OcrStatus,
     Passage,
 )
-from app.models.event import CaseEvent, DatePrecision, EventKind, EventProvenance
+from app.models.event import (
+    CaseEvent,
+    CaseEventNote,
+    DatePrecision,
+    EventKind,
+    EventProvenance,
+)
 from app.models.extraction import ExtractedFact, FactField
 from app.models.mfa import RecoveryCode, UserMfa
 from app.models.passkey import Passkey, PasskeyChallenge
@@ -32,6 +38,7 @@ __all__ = [
     "CaseAction",
     "CaseAuditEvent",
     "CaseEvent",
+    "CaseEventNote",
     "DatePrecision",
     "Document",
     "DocumentKind",

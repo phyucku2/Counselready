@@ -16,6 +16,7 @@ from fastapi import FastAPI
 
 from app.api.auth import router as auth_router
 from app.api.cases import router as cases_router
+from app.api.events import router as events_router
 from app.api.health import router as health_router
 from app.api.mfa import router as mfa_router
 from app.api.passkeys import router as passkeys_router
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
     application.include_router(mfa_router)
     application.include_router(passkeys_router)
     application.include_router(cases_router)
+    application.include_router(events_router)
     return application
 
 

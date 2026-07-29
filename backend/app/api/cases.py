@@ -15,13 +15,16 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, DbSession
+from app.core.config import settings
 from app.ingest.limits import (
     DEFAULT_MAX_UPLOAD_BYTES,
     EmptyUploadError,
@@ -37,7 +40,7 @@ from app.ingest.pdf import (
 from app.ingest.service import DuplicateDocumentError, IngestRequest, ingest_document
 from app.models.audit import CaseAction, CaseAuditEvent
 from app.models.case import Case, Jurisdiction
-from app.models.document import Document, DocumentKind, IngestSource
+from app.models.document import Document, DocumentKind, DocumentPage, IngestSource, Passage
 from app.models.user import UserAccount
 from app.storage.base import ObjectStore
 from app.storage.local import LocalObjectStore
@@ -54,12 +57,14 @@ def object_store(request: Request) -> ObjectStore:
 
     A local filesystem store until the Azure backend lands (ADR-0006); overridden in
     tests. Kept as a dependency so no handler reaches for a global.
+
+    The root comes from configuration rather than a temporary directory: someone
+    running this locally is putting real filings through it, and `/tmp` is both
+    world-readable on a shared machine and cleared on reboot.
     """
     store = getattr(request.app.state, "object_store", None)
     if store is None:
-        from pathlib import Path
-
-        store = LocalObjectStore(Path("/tmp/counselready-objects"))  # noqa: S108
+        store = LocalObjectStore(Path(settings.object_root))
         request.app.state.object_store = store
     return store
 
@@ -80,6 +85,29 @@ async def owned_case(case_id: uuid.UUID, account: CurrentUser, session: DbSessio
 
 OwnedCase = Annotated[Case, Depends(owned_case)]
 Store = Annotated[ObjectStore, Depends(object_store)]
+
+DOCUMENT_NOT_FOUND = HTTPException(
+    status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+)
+
+
+async def owned_document(document_id: uuid.UUID, case: OwnedCase, session: DbSession) -> Document:
+    """The document, if it sits in a case this account owns. Otherwise a 404.
+
+    Scoped through `owned_case` rather than looked up by id alone, so a document id
+    guessed or copied from elsewhere cannot be read out of someone else's file.
+    """
+    document = (
+        await session.execute(
+            select(Document).where(Document.id == document_id, Document.case_id == case.id)
+        )
+    ).scalar_one_or_none()
+    if document is None:
+        raise DOCUMENT_NOT_FOUND
+    return document
+
+
+OwnedDocument = Annotated[Document, Depends(owned_document)]
 
 
 def _audit(
@@ -117,6 +145,33 @@ class DocumentResponse(BaseModel):
     page_count: int
     ocr_status: str
     filed_at: datetime | None
+
+
+class PassageResponse(BaseModel):
+    """A span the reader can be pointed at.
+
+    Offsets *and* the stored quote travel together for the same reason the table keeps
+    both: the surface highlights by offset, but if a page were ever re-extracted the
+    quote is what proves the highlight still covers the words it claimed.
+    """
+
+    id: str
+    start_offset: int
+    end_offset: int
+    quote: str
+
+
+class PageResponse(BaseModel):
+    page_number: int
+    text: str
+    # NULL means "not measured" — a native PDF with a text layer — which is not the
+    # same as a measured zero, so it stays nullable all the way to the client.
+    ocr_confidence: float | None
+    passages: list[PassageResponse]
+
+
+class DocumentDetailResponse(DocumentResponse):
+    pages: list[PageResponse]
 
 
 def _case_response(case: Case) -> CaseResponse:
@@ -205,6 +260,68 @@ async def list_documents(
     )
     await session.flush()
     return [_document_response(document) for document in documents]
+
+
+@router.get(
+    "/cases/{case_id}/documents/{document_id}",
+    response_model=DocumentDetailResponse,
+)
+async def read_document(
+    document: OwnedDocument, account: CurrentUser, session: DbSession
+) -> DocumentDetailResponse:
+    """The extracted text of one document, page by page, with its citable passages.
+
+    This is the reader's view of their own filing, so nothing is redacted here. The
+    redaction rule in CLAUDE.md §3 governs *generated output and exports* — material
+    that leaves the account holder's hands. It was never meant to hide a person's own
+    children's names from them while they read a document they already possess.
+    """
+    pages = list(
+        (
+            await session.execute(
+                select(DocumentPage)
+                .where(DocumentPage.document_id == document.id)
+                .order_by(DocumentPage.page_number)
+                .options(selectinload(DocumentPage.passages))
+            )
+        ).scalars()
+    )
+    _audit(
+        session,
+        account=account,
+        case_id=document.case_id,
+        action=CaseAction.document_read,
+        detail={"pages": len(pages)},
+    )
+    await session.flush()
+
+    return DocumentDetailResponse(
+        **_document_response(document).model_dump(),
+        pages=[
+            PageResponse(
+                page_number=page.page_number,
+                text=page.text,
+                ocr_confidence=page.ocr_confidence,
+                # Sorted here rather than left to the relationship's arbitrary order:
+                # a viewer highlighting spans in document order must not depend on
+                # whatever sequence the database happened to return.
+                passages=[
+                    _passage_response(passage)
+                    for passage in sorted(page.passages, key=lambda item: item.start_offset)
+                ],
+            )
+            for page in pages
+        ],
+    )
+
+
+def _passage_response(passage: Passage) -> PassageResponse:
+    return PassageResponse(
+        id=str(passage.id),
+        start_offset=passage.start_offset,
+        end_offset=passage.end_offset,
+        quote=passage.quote,
+    )
 
 
 async def _stream(upload: UploadFile) -> AsyncIterator[bytes]:

@@ -281,3 +281,88 @@ async def test_a_refused_upload_into_another_case_is_not_audited_against_it(
         )
     ).scalar_one()
     assert uploads == 0
+
+
+async def test_reading_a_document_returns_its_pages_in_order(client: AsyncClient) -> None:
+    headers = await _signed_in(client)
+    case_id = await _case(client, headers)
+    document_id = (
+        await client.post(
+            f"/cases/{case_id}/documents", files=_pdf([LINE, "Page two."]), headers=headers
+        )
+    ).json()["id"]
+
+    response = await client.get(f"/cases/{case_id}/documents/{document_id}", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [page["page_number"] for page in body["pages"]] == [1, 2]
+    assert LINE in body["pages"][0]["text"]
+    # Nothing has been extracted yet, so the honest answer is an empty list rather
+    # than an invented citation.
+    assert body["pages"][0]["passages"] == []
+
+
+async def test_a_native_pdf_page_reports_unmeasured_confidence_not_zero(
+    client: AsyncClient,
+) -> None:
+    """NULL means "not measured". Reporting 0.0 would tell the reader the extraction
+    was certainly wrong, which is a different claim entirely."""
+    headers = await _signed_in(client)
+    case_id = await _case(client, headers)
+    document_id = (
+        await client.post(f"/cases/{case_id}/documents", files=_pdf(), headers=headers)
+    ).json()["id"]
+
+    body = (await client.get(f"/cases/{case_id}/documents/{document_id}", headers=headers)).json()
+    assert body["pages"][0]["ocr_confidence"] is None
+
+
+async def test_a_document_cannot_be_read_through_another_accounts_case(
+    client: AsyncClient,
+) -> None:
+    mine = await _signed_in(client)
+    theirs = await _signed_in(client)
+    their_case = await _case(client, theirs)
+    document_id = (
+        await client.post(f"/cases/{their_case}/documents", files=_pdf(), headers=theirs)
+    ).json()["id"]
+
+    response = await client.get(f"/cases/{their_case}/documents/{document_id}", headers=mine)
+    assert response.status_code == 404
+
+
+async def test_a_document_from_another_case_is_not_readable_through_your_own(
+    client: AsyncClient,
+) -> None:
+    """The document id alone is not a capability — it has to sit in the case named in
+    the path."""
+    mine = await _signed_in(client)
+    theirs = await _signed_in(client)
+    my_case = await _case(client, mine)
+    their_case = await _case(client, theirs)
+    their_document = (
+        await client.post(f"/cases/{their_case}/documents", files=_pdf(), headers=theirs)
+    ).json()["id"]
+
+    response = await client.get(f"/cases/{my_case}/documents/{their_document}", headers=mine)
+    assert response.status_code == 404
+
+
+async def test_reading_a_document_is_audited(client: AsyncClient, session: AsyncSession) -> None:
+    headers = await _signed_in(client)
+    case_id = await _case(client, headers)
+    document_id = (
+        await client.post(f"/cases/{case_id}/documents", files=_pdf(), headers=headers)
+    ).json()["id"]
+    await client.get(f"/cases/{case_id}/documents/{document_id}", headers=headers)
+
+    reads = (
+        await session.execute(
+            text(
+                "SELECT count(*) FROM case_audit_event "
+                "WHERE case_id = :case_id AND action = 'document_read'"
+            ),
+            {"case_id": uuid.UUID(case_id)},
+        )
+    ).scalar_one()
+    assert reads == 1

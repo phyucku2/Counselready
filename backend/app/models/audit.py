@@ -61,6 +61,9 @@ class CaseAction(StrEnum):
     document_uploaded = "document_uploaded"
     document_list = "document_list"
     document_read = "document_read"
+    event_created = "event_created"
+    event_list = "event_list"
+    event_note_created = "event_note_created"
 
 
 class CaseAuditEvent(TimestampedBase):

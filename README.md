@@ -38,9 +38,17 @@ Decisions live in [`docs/decisions/`](docs/decisions/). Current state of the bui
 ## Layout
 
 ```
+backend/        FastAPI service, SQLAlchemy models, Alembic migrations
+frontend/       React + Vite web client
 docs/
   decisions/    ADRs — dated, short, why-not-just-what
   brainstorm/   Multi-lens brainstorms and research (CLAUDE.md §8)
   product/      Product specs and positioning
   engineering/  Standards and design notes
 ```
+
+## Running it
+
+[`docs/engineering/running-locally.md`](docs/engineering/running-locally.md) — Postgres,
+the API, and the web client on one machine, with the cautions that apply before you put
+real case documents through it.

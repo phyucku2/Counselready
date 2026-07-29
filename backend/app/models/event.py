@@ -13,6 +13,9 @@ An event is either:
 
 The constraints make each shape's required companion column mandatory and the other
 one's impossible, so a row can never claim documentary support it does not have.
+
+Events are **permanent**. A correction is a `CaseEventNote` recorded beside the entry,
+never an edit to it — see that class for why.
 """
 
 from __future__ import annotations
@@ -128,3 +131,42 @@ class CaseEvent(TimestampedBase):
     )
 
     passage: Mapped[Passage | None] = relationship()
+    notes: Mapped[list[CaseEventNote]] = relationship(
+        back_populates="event", cascade="all, delete-orphan", order_by="CaseEventNote.created_at"
+    )
+
+
+class CaseEventNote(TimestampedBase):
+    """A correction or clarification recorded *beside* an event, never on top of it.
+
+    Timeline entries are permanent. Someone who mistypes a date, or who reads a filing
+    that states something they know to be wrong, does not edit the entry — they attach
+    a note. Two reasons this is the right shape rather than a mutable row:
+
+    * A chronology whose entries can be silently rewritten is worth less the moment
+      anyone else looks at it. What was originally recorded, and when, survives.
+    * For a **document-derived** event, editing is not even coherent: the summary is
+      what the document says, anchored to a passage (ADR-0005). A user who disagrees
+      is not correcting our reading of the filing, they are contradicting the filing —
+      a different claim entirely, and one that must stay attributed to them.
+
+    A note is therefore always the account holder's own statement. There is no
+    documentary variant, and none of the `case_event` provenance machinery applies:
+    the author column is unconditionally NOT NULL because *every* note has a person
+    behind it.
+    """
+
+    __tablename__ = "case_event_note"
+    __table_args__ = (Index("ix_case_event_note_event_created", "event_id", "created_at"),)
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("case_event.id", ondelete="CASCADE"), nullable=False
+    )
+    # NOT NULL and CASCADE: a note is somebody's statement, so an unattributed one is
+    # meaningless, and deleting the account destroys the case material anyway (ADR-0011).
+    author_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+
+    event: Mapped[CaseEvent] = relationship(back_populates="notes")

@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     webauthn_rp_id: str = "localhost"
     webauthn_origin: str = "http://localhost:5173"
 
+    # Where uploaded document bytes are written by the local object store. Kept
+    # outside the checkout by default and configurable, because a person running this
+    # on their own machine is putting real filings through it and must be able to say
+    # where they land — never inside the repository, where a stray `git add` reaches.
+    object_root: str = "/var/lib/counselready/objects"
+
     # Number of serving worker processes. Read by the lifespan guard.
     web_concurrency: int = 1
 

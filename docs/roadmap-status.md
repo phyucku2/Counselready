@@ -27,7 +27,7 @@ gates everything downstream.
 |---|---|---|---|---|---|
 | 1.1 | **Document ingest engine** — bounded-before-materializing upload reader, content-addressed blob storage behind a protocol, SHA-256 dedup, text-layer extraction into pages | ✅ | ✅ | ⏳ | ADR-0006. Blob written before the row, so a failure leaves a collectable object rather than a record pointing at nothing. `needs_ocr` added as a distinct state. 90 tests at the time. |
 | 1.1b | **Case + document HTTP routes** — create/list/read cases, upload/list documents, ownership as a dependency, case-material audit trail | ✅ | ✅ | ⏳ | ADR-0009. Another account's case is a 404, not a 403 — byte-identical to one that never existed. Audit holds counts only, proven by absence. Oversized upload refused with 413 on the real path. 175 tests, 95% coverage. |
-| 1.1c | `GET /documents/{id}` with page text | ⏳ | ⏳ | ⏳ | Blocked on a redaction decision: serving page text means serving minors' identifiers unless they are stripped (CLAUDE.md §3). |
+| 1.1c | **`GET /cases/{id}/documents/{id}` — page text and passages** | ✅ | ✅ | ⏳ | ADR-0012. The redaction block is resolved rather than worked around: §3 governs **generated output and exports**, not the owner reading their own filing. Redaction attaches at the export boundary and is its own portion (5.4). A document id is not a capability — it must sit in the case named in the path (a test for each way of getting that wrong). `ocr_confidence` stays nullable to the client: *not measured* ≠ a measured zero. |
 | 1.2a | **Job queue + OCR seam** — Postgres-backed queue (`FOR UPDATE SKIP LOCKED`), backoff, attempt budget, OCR engine protocol, page-filling logic | ✅ | ✅ | ⏳ | ADR-0011. Job and document commit in one transaction, so the queue can never hold work for a rolled-back document. `last_error` is a failure class, never an exception message. |
 | 1.2b | **OCR engine (Azure Document Intelligence)** | 🚫 Blocked | | | Owner-side: needs the Azure subscription. The seam and pipeline are built and tested; only the concrete engine is missing. |
 | 1.2c | Worker process to drain the queue | ⏳ | ⏳ | ⏳ | Deployment shape; belongs with the Azure work. |
@@ -43,8 +43,8 @@ gates everything downstream.
 |---|---|---|---|---|---|
 | 2.1a | **Timeline event schema + provenance split** — `case_event` with CHECK constraints: document-derived events cite a passage and are not attributed to a person; user-asserted events name their author and hold no passage | ✅ | ✅ | ⏳ | ADR-0005. Migration `8a1be962755b`, round-tripped. `date_precision` prevents false precision on "in March"-style sources. Conflicting accounts proven to persist as two attributed rows. 60 tests, 98% coverage. |
 | 2.1b | Event extraction — populate documentary events from page text | ⏳ | ⏳ | ⏳ | Rides with the dissection extractor (1.3b); an event that cannot be anchored is dropped. |
-| 2.2 | Timeline assembly + read API — ordering, filtering, and the `date_precision`-aware renderer | ⏳ | ⏳ | ⏳ | A renderer that formats `occurred_at` without consulting `date_precision` reintroduces false precision — needs its own test (ADR-0005). |
-| 2.3 | Timeline UI — accessible by construction; a list/table equivalent ships alongside any visualization | ⏳ | ⏳ | ⏳ | WCAG 2.2 AA. |
+| 2.2 | **Timeline read/write API + corrections** | ✅ | ✅ | ⏳ | ADR-0012. `provenance` is absent from the request body, not validated: a field that cannot be sent cannot be smuggled, so only extraction can create a documentary event. Entries are permanent; `case_event_note` records a correction beside an entry, and the absence of update/delete routes is asserted against the OpenAPI schema so adding one fails the build. Ordered by `occurred_at` with `created_at` as tiebreak. Migration `4b7c1d90e2aa`; its downgrade rebuilds the audit enum and drops orphaned rows rather than rewriting a recorded action. |
+| 2.3 | **Timeline UI** — chronology as an ordered list, manual entry, corrections inline, provenance on every row | ✅ | ✅ | ⏳ | ADR-0012. `formatOccurred` consults `date_precision`, closing the false-precision defect ADR-0005 predicted — verified in the browser as "March 2026", not a day. The control says "Add a correction", never "Edit", because the label has to match what happens. No visualization to need an equivalent for: the list *is* the surface. |
 
 ## Phase 3 — Issue spotting
 
@@ -58,6 +58,15 @@ gates everything downstream.
 |---|---|---|---|---|---|
 | 4.0 | **Bias evaluation, documented** — before any of 4.1 ships | ⏳ | ⏳ | ⏳ | Tone classifiers score dialects and non-native English as more hostile; this gate exists because of that. |
 | 4.1 | Party language review — quote-based and attributed, never scored | ⏳ | ⏳ | ⏳ | No "aggression scores." Owner + counsel sign off on wording. |
+
+## Phase 5 — Client surfaces
+
+| # | Portion | Built | Tested | Merged | Notes |
+|---|---|---|---|---|---|
+| 5.1 | **Web client — sign in (incl. MFA step), cases, upload, document viewer, timeline, corrections** | ✅ | ✅ | ⏳ | ADR-0012. React + Vite, same-origin through a dev/preview proxy so no CORS relaxation exists anywhere. Tokens in memory only — closing the tab signs you out, the right trade for a product holding a family's court file. Passage highlights clamp bad offsets to *no highlight*, never to dropped text. Built bundle driven through Chromium end to end: zero console errors, warnings, page errors, or failed requests. |
+| 5.2 | Client regression suite + npm license scan | ⏳ | ⏳ | ⏳ | The browser check is a script, not a suite — component/e2e tests before the surface grows further. CI gates the frontend on types and build only; the §4 permissive-license scan covers Python dependencies and not npm ones. |
+| 5.3 | Structured date corrections | ⏳ | ⏳ | ⏳ | A note saying "the date was wrong" does not move the entry in the ordering (ADR-0012). Only worth doing if hand-built chronologies actually accumulate them. |
+| 5.4 | Export + the redaction boundary | ⏳ | ⏳ | ⏳ | Where CLAUDE.md §3 redaction actually attaches. Nothing is exportable until this ships. |
 
 ## Cross-cutting, not a phase
 

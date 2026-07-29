@@ -6,11 +6,26 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "pydantic>=2.9",
+    # The `email` extra pulls email-validator, which `EmailStr` on the auth request
+    # models requires at import time — the app does not start without it.
+    "pydantic[email]>=2.9",
     "pydantic-settings>=2.6",
     "sqlalchemy[asyncio]>=2.0.36",
     "alembic>=1.14",
     "asyncpg>=0.30",
+    # Document ingest. `python-multipart` is what FastAPI requires to parse a
+    # multipart upload at all — without it the document route raises at import time,
+    # so it is a hard runtime dependency and not an extra.
+    "pypdf>=5.1",
+    "python-multipart>=0.0.18",
+    # Authentication: password hashing, tokens, TOTP, passkeys. `cryptography` is
+    # named explicitly rather than leaned on as a transitive dependency of webauthn,
+    # because `app.auth.mfa` imports Fernet directly to encrypt TOTP secrets at rest.
+    "argon2-cffi>=23.1",
+    "PyJWT>=2.9",
+    "pyotp>=2.9",
+    "webauthn>=2.2",
+    "cryptography>=43.0",
 ]
 
 [project.optional-dependencies]

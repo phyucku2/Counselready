@@ -1,0 +1,29 @@
+# Secret-scan configuration (CLAUDE.md §3: no secrets in the repo).
+#
+# The default rule set is kept in full — this file only narrows what counts as a
+# finding, never what is scanned.
+#
+# The problem it solves: the auth tests need signing keys long enough to be valid
+# HS256 material (RFC 7518 §3.2 requires >= 32 bytes), and a 40-character key is
+# high-entropy by construction, so `generic-api-key` flags every one of them. Thirteen
+# such constants exist across the test suite and none is a credential.
+#
+# The allowlist keys off the **marker in the value**, not the file path. A
+# path-based exemption for `backend/tests/` would have been shorter and much worse:
+# a real credential pasted into a test file would then sail through the scan, and
+# test fixtures are exactly where a hurried copy-paste from a live environment lands.
+# Keying off `SYNTHETIC_` means the scan still fails on anything in a test that is not
+# explicitly declared fake.
+#
+# Consequence, and it is the intended one: a new test key that does not carry the
+# `SYNTHETIC_` prefix WILL fail CI. That is the prompt to rename it, not to widen
+# this file.
+
+title = "CounselReady"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic credentials in tests, declared as such by their value"
+regexes = ['''SYNTHETIC_[A-Z0-9_]{8,}''']

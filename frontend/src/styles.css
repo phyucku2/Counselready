@@ -1,0 +1,354 @@
+/*
+ * Deliberately calm. People use this during the worst period of their lives, so
+ * nothing here is urgent-red, nothing pulses, nothing celebrates. Generous spacing
+ * and large targets because a lot of this happens one-handed on a phone.
+ */
+
+:root {
+  --ink: #16211c;
+  --muted: #5a6b62;
+  --line: #d8e0da;
+  --paper: #fbfcfb;
+  --card: #ffffff;
+  --accent: #2f6b52;
+  --accent-ink: #ffffff;
+  --warn: #7a4a12;
+  --warn-bg: #fdf4e6;
+
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Visible focus everywhere — keyboard users must never lose their place. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.page {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 1.5rem clamp(1rem, 4vw, 2rem) 4rem;
+}
+
+header.bar {
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+
+header.bar .inner {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 0.9rem clamp(1rem, 4vw, 2rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.brand {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-size: 1.05rem;
+}
+
+.brand span {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+  display: block;
+}
+
+h1 {
+  font-size: clamp(1.4rem, 3.5vw, 1.9rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 0.35rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 2rem 0 0.75rem;
+}
+
+p.lede {
+  color: var(--muted);
+  margin: 0 0 1.75rem;
+  max-width: 46rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.stack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+label {
+  display: block;
+  font-weight: 550;
+  margin-bottom: 0.3rem;
+  font-size: 0.92rem;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+input[type="file"],
+textarea,
+select {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--card);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 5rem;
+}
+
+/* 44px minimum target (WCAG 2.2 AA), because much of this is thumb-driven. */
+button {
+  font: inherit;
+  font-weight: 550;
+  min-height: 44px;
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+button.quiet {
+  background: transparent;
+  color: var(--accent);
+  border-color: transparent;
+  padding: 0.3rem 0;
+  min-height: 32px;
+  font-size: 0.86rem;
+  text-decoration: underline;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* Errors are stated plainly rather than shouted. */
+.notice {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn);
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.94rem;
+}
+
+ul.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+ul.list a,
+ul.list .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  text-decoration: none;
+  color: inherit;
+}
+
+ul.list a:hover {
+  border-color: var(--accent);
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.tag {
+  font-size: 0.78rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.footnote {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+  max-width: 46rem;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+/*
+ * The chronology. The rule down the left is decorative, so the marker is a border
+ * rather than list-style content a screen reader would read out as noise — the
+ * ordered list already conveys the sequence.
+ */
+ol.timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+ol.timeline > li {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 0.9rem 1.1rem;
+}
+
+ol.timeline .when {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+ol.timeline .what {
+  margin: 0.35rem 0 0.5rem;
+}
+
+ol.timeline .source {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+  display: grid;
+  gap: 0.3rem;
+}
+
+/* The provenance tag sizes to its text — stretched across the card it reads as a
+   banner rather than a label. */
+ol.timeline .source .tag {
+  justify-self: start;
+}
+
+ol.timeline .quote {
+  border-left: 2px solid var(--line);
+  padding-left: 0.7rem;
+  font-style: italic;
+}
+
+/*
+ * Corrections. Visually subordinate to the entry — indented, quieter — because the
+ * entry is what was recorded and the note is what was said about it afterwards. The
+ * reader must be able to tell those apart at a glance.
+ */
+ul.corrections {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0 0 0 0.9rem;
+  border-left: 2px solid var(--line);
+  display: grid;
+  gap: 0.6rem;
+}
+
+ul.corrections .stamp {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+ul.corrections p {
+  margin: 0.1rem 0 0;
+  font-size: 0.94rem;
+}
+
+.correction-form {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+/*
+ * Extracted page text. Pre-wrap because the layout of a filing carries meaning —
+ * collapsing its line breaks would quietly reformat the document the reader came
+ * here to check. A comfortable measure keeps long orders readable.
+ */
+.page-text {
+  margin-top: 1rem;
+}
+
+.page-text p:last-child {
+  white-space: pre-wrap;
+  max-width: 44rem;
+  margin: 0.5rem 0 0;
+}
+
+/* Highlights carry a border as well as a tint, so the citation is still visible to
+   someone who cannot distinguish the background colour. */
+.page-text mark {
+  background: #fdf4e6;
+  border-bottom: 2px solid var(--warn);
+  color: inherit;
+}

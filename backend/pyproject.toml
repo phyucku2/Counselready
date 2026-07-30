@@ -1,0 +1,99 @@
+[project]
+name = "counselready-backend"
+version = "0.1.0"
+description = "CounselReady backend — family court document organization"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    # The `email` extra pulls email-validator, which `EmailStr` on the auth request
+    # models requires at import time — the app does not start without it.
+    "pydantic[email]>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "alembic>=1.14",
+    "asyncpg>=0.30",
+    # Document ingest. `python-multipart` is what FastAPI requires to parse a
+    # multipart upload at all — without it the document route raises at import time,
+    # so it is a hard runtime dependency and not an extra.
+    "pypdf>=5.1",
+    "python-multipart>=0.0.18",
+    # Authentication: password hashing, tokens, TOTP, passkeys. `cryptography` is
+    # named explicitly rather than leaned on as a transitive dependency of webauthn,
+    # because `app.auth.mfa` imports Fernet directly to encrypt TOTP secrets at rest.
+    "argon2-cffi>=23.1",
+    "PyJWT>=2.9",
+    "pyotp>=2.9",
+    "webauthn>=2.2",
+    "cryptography>=43.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "S",    # bandit
+    "DTZ",  # flake8-datetimez — naive datetimes are a correctness bug here
+    "T20",  # no print
+    "RUF",
+]
+ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]
+# Alembic renders every migration from one template. `sa`/`op` are used by
+# virtually all real migrations and unused only in an empty one, so the template
+# keeps them and this exemption keeps generated files lint-clean on arrival.
+"alembic/versions/*" = ["F401"]
+
+[tool.ruff.lint.isort]
+# Without this, the local `alembic/` directory makes ruff classify the installed
+# `alembic` package as first-party and reorder every generated migration's imports.
+known-third-party = ["alembic"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=85 -q"
+
+[tool.coverage.run]
+branch = true
+# SQLAlchemy's asyncio bridge executes ORM work inside greenlets. Without this,
+# coverage silently misses every line that runs there — which is most of the
+# database code — and reports a number far below what the tests actually cover.
+concurrency = ["thread", "greenlet"]
+omit = ["app/__main__.py"]

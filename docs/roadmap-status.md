@@ -1,0 +1,79 @@
+# Roadmap status board
+
+The single source of truth for what remains and where each portion stands. Updated every
+development-loop cycle; one portion = one small PR (CLAUDE.md §10). States: **Built**
+(code complete on a branch), **Tested** (full gate green per Definition of Done,
+adversarial review findings fixed), **Merged** (on `main`).
+
+## Phase 0 — Foundations
+
+| # | Portion | Built | Tested | Merged | Notes |
+|---|---|---|---|---|---|
+| 0.1 | Repo scaffolding — governance (CLAUDE.md), ADR-0001 (scope & non-advice posture), ADR-0002 (Azure architecture), founding brainstorm + market research migrated | ✅ | n/a | ⏳ | Docs only; no code. |
+| 0.2 | Backend skeleton — API service, database session, migration infrastructure, CI quality gate (lint/format/types/tests/coverage/secret-scan), license scan | ✅ | ✅ | ⏳ | ADR-0003. FastAPI + SQLAlchemy 2 async + Alembic + Postgres. Liveness/readiness probes (readiness fails closed to 503). Document-text-free request logging: route templates only, request id resolved before downstream so a 500 still logs one correlated line. Startup guard in the lifespan, not in `Settings`, so Alembic is unaffected. Naming convention on the metadata for stable migration constraint names. 32 tests, 97% coverage, `mypy --strict` clean; generated migrations verified lint-clean. |
+| 0.3a | **Auth — passwords, sessions, and the route gate** — Argon2id, access/refresh tokens with rotation + replay detection, immediate logout, per-identity rate limiting, `current_user` dependency | ✅ | ✅ | ⏳ | ADR-0007. Login does not disclose whether an account exists (identical bodies + timing test). Replaying a rotated refresh token revokes the whole session. `logout-all` shipped now, not in a later hardening pass. JWT secret must be ≥32 chars or the boot fails. 136 tests, 97% coverage. |
+| 0.3b | **MFA (TOTP)** — two-step enrolment, challenge-based login, replay-protected codes, single-use recovery codes, encrypted-at-rest secrets | ✅ | ✅ | ⏳ | ADR-0008. No vendor: TOTP is verified locally, SMS rejected (SIM-swap, and a shared family plan hands codes to the wrong person). A password alone now yields only a 5-minute challenge. 159 tests, 96% coverage. |
+| 0.3b-i | **Rate-limit MFA code attempts** | ⏳ | ⏳ | ⏳ | **Known gap, close before launch** (ADR-0008): the verify step is unthrottled, so a 6-digit code is brute-forceable within a challenge's lifetime. |
+| 0.3b-ii | **Passkeys (WebAuthn) — Face ID / fingerprint sign-in** | ✅ | ✅ | ⏳ | ADR-0010. Phishing-resistant and phone-friendly; no biometric data ever reaches us (we store a public key). Satisfies both factors at once via `user_verification=REQUIRED`. TOTP retained as the portable fallback. `backed_up` surfaced so the UI can warn about synced passkeys. Needs the real domain for `WEBAUTHN_RP_ID` before production. |
+| 0.3c | Password reset + login alerting | ⏳ | ⏳ | ⏳ | Both need the email-sending egress seam, which under ADR-0002 ships off by default and in-tenant. `auth_event` already records what an alert would need. |
+| 0.4 | **Account & data deletion** — password + MFA re-auth, full destruction of cases/documents/blobs/credentials, audit retained anonymized | ✅ | ✅ | ⏳ | ADR-0011. Blobs deleted after the transaction commits, so a failure leaves collectable garbage rather than records pointing at absent bytes. Cascade completeness asserted by test. |
+
+## Phase 1 — Ingest, OCR, and document dissection
+
+The phase that determines whether the product is trustworthy at all. Extraction quality
+gates everything downstream.
+
+| # | Portion | Built | Tested | Merged | Notes |
+|---|---|---|---|---|---|
+| 1.1 | **Document ingest engine** — bounded-before-materializing upload reader, content-addressed blob storage behind a protocol, SHA-256 dedup, text-layer extraction into pages | ✅ | ✅ | ⏳ | ADR-0006. Blob written before the row, so a failure leaves a collectable object rather than a record pointing at nothing. `needs_ocr` added as a distinct state. 90 tests at the time. |
+| 1.1b | **Case + document HTTP routes** — create/list/read cases, upload/list documents, ownership as a dependency, case-material audit trail | ✅ | ✅ | ⏳ | ADR-0009. Another account's case is a 404, not a 403 — byte-identical to one that never existed. Audit holds counts only, proven by absence. Oversized upload refused with 413 on the real path. 175 tests, 95% coverage. |
+| 1.1c | **`GET /cases/{id}/documents/{id}` — page text and passages** | ✅ | ✅ | ⏳ | ADR-0012. The redaction block is resolved rather than worked around: §3 governs **generated output and exports**, not the owner reading their own filing. Redaction attaches at the export boundary and is its own portion (5.4). A document id is not a capability — it must sit in the case named in the path (a test for each way of getting that wrong). `ocr_confidence` stays nullable to the client: *not measured* ≠ a measured zero. |
+| 1.2a | **Job queue + OCR seam** — Postgres-backed queue (`FOR UPDATE SKIP LOCKED`), backoff, attempt budget, OCR engine protocol, page-filling logic | ✅ | ✅ | ⏳ | ADR-0011. Job and document commit in one transaction, so the queue can never hold work for a rolled-back document. `last_error` is a failure class, never an exception message. |
+| 1.2b | **OCR engine (Azure Document Intelligence)** | 🚫 Blocked | | | Owner-side: needs the Azure subscription. The seam and pipeline are built and tested; only the concrete engine is missing. |
+| 1.2c | Worker process to drain the queue | ⏳ | ⏳ | ⏳ | Deployment shape; belongs with the Azure work. |
+| 1.2d | Pruning jobs — finished jobs, expired passkey challenges, expired sessions | ⏳ | ⏳ | ⏳ | Three small cleanups, all now pointing at the same queue. One portion together. |
+| 1.3a | **Core case-file schema** — user/case/party/document/page/passage/extracted_fact, with the citation guarantee as a NOT NULL foreign key | ✅ | ✅ | ⏳ | ADR-0004. Migration `2d61942264a6`, verified reversible (upgrade → downgrade → upgrade). 50 tests (32 unit + 18 live-Postgres integration), 98% coverage, `mypy --strict` clean. The database rejects an unanchored fact — proven by test, not by convention. |
+| 1.3b | Document dissection — the extractor that populates those fields from page text | ⏳ | ⏳ | ⏳ | Must locate every value in the source text; a value it cannot anchor is dropped, not stored. |
+| 1.4 | Florida jurisdiction profile — document types and terminology behind the profile seam | ⏳ | ⏳ | ⏳ | CLAUDE.md §7. |
+| 1.5 | Accuracy validation harness — synthetic gold-standard corpus, precision/recall per field, error taxonomy with hallucination as a release-blocking class | ⏳ | ⏳ | ⏳ | Synthetic documents only (§3). |
+
+## Phase 2 — Timeline
+
+| # | Portion | Built | Tested | Merged | Notes |
+|---|---|---|---|---|---|
+| 2.1a | **Timeline event schema + provenance split** — `case_event` with CHECK constraints: document-derived events cite a passage and are not attributed to a person; user-asserted events name their author and hold no passage | ✅ | ✅ | ⏳ | ADR-0005. Migration `8a1be962755b`, round-tripped. `date_precision` prevents false precision on "in March"-style sources. Conflicting accounts proven to persist as two attributed rows. 60 tests, 98% coverage. |
+| 2.1b | Event extraction — populate documentary events from page text | ⏳ | ⏳ | ⏳ | Rides with the dissection extractor (1.3b); an event that cannot be anchored is dropped. |
+| 2.2 | **Timeline read/write API + corrections** | ✅ | ✅ | ⏳ | ADR-0012. `provenance` is absent from the request body, not validated: a field that cannot be sent cannot be smuggled, so only extraction can create a documentary event. Entries are permanent; `case_event_note` records a correction beside an entry, and the absence of update/delete routes is asserted against the OpenAPI schema so adding one fails the build. Ordered by `occurred_at` with `created_at` as tiebreak. Migration `4b7c1d90e2aa`; its downgrade rebuilds the audit enum and drops orphaned rows rather than rewriting a recorded action. |
+| 2.3 | **Timeline UI** — chronology as an ordered list, manual entry, corrections inline, provenance on every row | ✅ | ✅ | ⏳ | ADR-0012. `formatOccurred` consults `date_precision`, closing the false-precision defect ADR-0005 predicted — verified in the browser as "March 2026", not a day. The control says "Add a correction", never "Edit", because the label has to match what happens. No visualization to need an equivalent for: the list *is* the surface. |
+
+## Phase 3 — Issue spotting
+
+| # | Portion | Built | Tested | Merged | Notes |
+|---|---|---|---|---|---|
+| 3.1 | Cross-filing inconsistency detection — contradicted dates, unanswered requests, missing responses | ⏳ | ⏳ | ⏳ | Framed as "questions to review," never verdicts (ADR-0001). |
+
+## Phase 4 — Language review (last, deliberately)
+
+| # | Portion | Built | Tested | Merged | Notes |
+|---|---|---|---|---|---|
+| 4.0 | **Bias evaluation, documented** — before any of 4.1 ships | ⏳ | ⏳ | ⏳ | Tone classifiers score dialects and non-native English as more hostile; this gate exists because of that. |
+| 4.1 | Party language review — quote-based and attributed, never scored | ⏳ | ⏳ | ⏳ | No "aggression scores." Owner + counsel sign off on wording. |
+
+## Phase 5 — Client surfaces
+
+| # | Portion | Built | Tested | Merged | Notes |
+|---|---|---|---|---|---|
+| 5.1 | **Web client — sign in (incl. MFA step), cases, upload, document viewer, timeline, corrections** | ✅ | ✅ | ⏳ | ADR-0012. React + Vite, same-origin through a dev/preview proxy so no CORS relaxation exists anywhere. Tokens in memory only — closing the tab signs you out, the right trade for a product holding a family's court file. Passage highlights clamp bad offsets to *no highlight*, never to dropped text. Built bundle driven through Chromium end to end: zero console errors, warnings, page errors, or failed requests. |
+| 5.2 | Client regression suite + npm license scan | ⏳ | ⏳ | ⏳ | The browser check is a script, not a suite — component/e2e tests before the surface grows further. CI gates the frontend on types and build only; the §4 permissive-license scan covers Python dependencies and not npm ones. |
+| 5.3 | Structured date corrections | ⏳ | ⏳ | ⏳ | A note saying "the date was wrong" does not move the entry in the ordering (ADR-0012). Only worth doing if hand-built chronologies actually accumulate them. |
+| 5.4 | Export + the redaction boundary | ⏳ | ⏳ | ⏳ | Where CLAUDE.md §3 redaction actually attaches. Nothing is exportable until this ships. |
+
+## Cross-cutting, not a phase
+
+| Portion | Status | Notes |
+|---|---|---|
+| Mobile apps (iOS + Android) | ⏳ | Web first, wrap once flows are proven. Deletion flow (0.4) is a hard prerequisite for store submission. |
+| Attorney / GAL review view | ⏳ | Fast-follow after Phase 2 — same citation architecture serves it. |
+| Terms of service + intake boundaries | 🚫 Blocked | Needs counsel: sealed/juvenile material, entitlement to uploaded documents, retention. (ADR-0001 open items.) |
+| Trademark clearance on "CounselReady" | 🚫 Blocked | Owner + counsel, before any app-store submission. |
+| Azure subscription and production secrets | 🚫 Blocked | Owner-side; do not collect until the owner initiates. |

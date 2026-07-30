@@ -1,0 +1,46 @@
+# Secrets — never committed (CLAUDE.md §3)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+local.settings.json
+
+# Case documents — no real case material ever enters the repo (CLAUDE.md §3)
+/samples/
+/case-files/
+*.uploaded
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+.vite/
+coverage/
+playwright-report/
+test-results/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Alembic bytecode from generated migrations
+alembic/versions/__pycache__/
